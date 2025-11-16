@@ -13,8 +13,16 @@ It offers:
 - Header-only implementation
 - No external dependencies
 
-SafePtr is an ideal replacement for std::unique_ptr when thread safety
-and high read throughput are required.
+SafePtr is a thread-safe smart pointer for systems with many readers and
+occasional writers. It is suitable as a replacement for:
+
+- std::unique_ptr (exclusive ownership with thread-safe access)
+- raw owning pointers (T*)
+- global/shared state objects
+- shared_ptr in read-mostly systems (SafePtr avoids ref counting)
+
+SafePtr is *not* a replacement for shared_ptr/weak_ptr ownership graphs,
+since it maintains a single owner and uses an RCU-style snapshot model.
 
 
 Key Features
