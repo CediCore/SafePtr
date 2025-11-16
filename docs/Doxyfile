@@ -1,0 +1,7 @@
+PROJECT_NAME           = "SafePtr"
+OUTPUT_DIRECTORY       = docs_output
+INPUT                  = ../include/safeptr.hpp
+GENERATE_TREEVIEW      = YES
+EXTRACT_ALL            = YES
+QUIET                  = YES
+GENERATE_LATEX         = NO

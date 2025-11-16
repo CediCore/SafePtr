@@ -1,0 +1,4 @@
+Source: safeptr
+Version: 1.0.0
+Description: A thread-safe smart pointer with lock-free reads and serialized writes.
+Build-Depends:
