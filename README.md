@@ -1,121 +1,175 @@
 SafePtr
 =======
 
-A high-performance, thread-safe smart pointer designed for shared state that is read frequently
-and written occasionally. SafePtr provides a lock-free, RCU-style read path and a serialized,
-copy-on-write update mechanism for writers.
+SafePtr is a lightweight, high-performance, thread-safe smart pointer
+designed for systems with many readers and occasional writers.
+It offers:
 
-SafePtr is intended as a drop-in replacement for std::unique_ptr in multithreaded systems where
-multiple readers and occasional writers must safely share access to a single object without
-introducing heavy locking overhead.
+- Lock-free, wait-free reads
+- Mutex-serialized writes
+- RCU-style snapshot access
+- Deferred deletion when readers finish
+- Array support (SafeArrayPtr<T[]>)
+- Header-only implementation
+- No external dependencies
+
+SafePtr is an ideal replacement for std::unique_ptr when thread safety
+and high read throughput are required.
+
 
 Key Features
 ------------
 
-- Lock-free read guards (no mutex, no blocking)
-- Serialized write guards (std::mutex) with copy-on-write updates
-- SafeWeakPtr for non-owning observers
-- Unique ownership semantics (similar to std::unique_ptr)
-- Supports custom deleters
-- Non-blocking try_read() and try_write()
-- ABA-safe pointer replacement with deferred deletion
-- Header-only library
+- Lock-free, wait-free read guards
+- Serialized writes (fast under low contention)
+- Snapshot (RCU-like) reader view
+- Deferred destruction when no guard uses the old pointer
+- Custom deleter support
+- Header-only (just include the .hpp)
+- Designed for high read concurrency
+- SafeArrayPtr<T[]> for array access
 
-SafePtr is ideal for:
 
-- Shared configuration/state objects
-- High-frequency readers with low write contention
-- Game engines, real-time systems, and simulation loops
-- Multithreaded AI state, analytics caches, or message routing tables
+Ideal Use Cases
+---------------
 
-Example Usage
--------------
+- Shared configuration/state
+- Real-time loops, game engines
+- AI agents, simulation systems
+- Concurrent lookup tables
+- High-frequency analytics or read pipelines
 
-#include <safeptr.hpp>
 
-using safeptr::SafeUniquePtr;
+Example: Single Object
+----------------------
 
-struct Config {
-    int value = 0;
-};
+    #include "safeptr.hpp"
+    using safeptr::SafeUniquePtr;
 
-SafeUniquePtr<Config> config(new Config());
+    struct Config { int value = 0; };
 
-// Reader thread
-{
-    auto r = config.read();
-    int v = r->value;
-}
+    SafeUniquePtr<Config> cfg(new Config());
 
-// Writer thread
-{
-    auto w = config.write();
-    auto old = w.old();
-    w.set_value(Config{ old.value + 1 });
-}
+    // Reader
+    {
+        auto r = cfg.read();
+        int v = r->value;
+    }
+
+    // Writer
+    {
+        auto w = cfg.write();
+        int old = w.old();
+        w.set_value(Config{ old + 1 });
+    }
+
+
+Example: Array Version
+----------------------
+
+    #include "safeptr.hpp"
+    using safeptr::SafeArrayPtr;
+
+    SafeArrayPtr<int> arr(new int[5]{1,2,3,4,5});
+
+    // Reader
+    {
+        auto r = arr.read();
+        int x = r[2];
+    }
+
+    // Writer
+    {
+        auto w = arr.write();
+        int* next = new int[5];
+        for (int i = 0; i < 5; ++i) next[i] = i * 10;
+        w.set_array(next);
+    }
+
 
 Threading Model
 ---------------
 
 Reads:
 - Lock-free
+- Wait-free
 - Snapshot-based
-- Never block, never wait for writers
+- Never blocks
+- Readers do not interact with writers or each other
 
 Writes:
-- Serialized with a mutex
+- Serialized via mutex
 - Replace global pointer atomically
-- Old pointer is deleted when all readers finish
+- Old pointer is deleted once last reader finishes
+
 
 API Overview
 ------------
 
-ReadGuard read();
-WriteGuard write();
-std::optional<ReadGuard> try_read();
-std::optional<WriteGuard> try_write();
-T* get();                // Unsafe access
-void reset(T*);          // Replace object
-operator bool() const;
+SafeUniquePtr<T>:
 
-Weak Pointer:
+    ReadGuard  read();
+    WriteGuard write();
 
-SafeWeakPtr<T> weak(sp);
-weak.try_read();
-weak.try_write();
+    bool valid() const;
+    explicit operator bool() const;
+
+    T* get_unsafe();
+    void reset(T*);
+
+SafeArrayPtr<T[]>:
+
+    auto r = arr.read();
+    r[i];           // safe array indexing
+
+    auto w = arr.write();
+    w.set_array(new_data);
+
 
 Installation
 ------------
 
 SafePtr is header-only.
 
-Copy include/safeptr.hpp into your project and include it:
+Just include:
 
-#include "safeptr.hpp"
+    #include "safeptr.hpp"
 
-Or use CMake:
+Or add the include/ directory to your project include path.
 
-add_subdirectory(SafePtr)
-target_link_libraries(MyApp PRIVATE safeptr)
 
-Building Tests
---------------
+Building (Makefile)
+-------------------
 
-mkdir build
-cd build
-cmake ..
-cmake --build .
-ctest
+The provided Makefile (GNU Make, w64devkit compatible) builds the project.
 
-Benchmark
----------
+Build everything:
 
-You can build and run the benchmark:
+    make
 
-cmake --build . --target bench_safeptr
-./bench_safeptr
+Run benchmark:
+
+    make bench
+    ./build/bin/bench_safeptr
+
+Clean:
+
+    make clean
+
+
+Benchmark Results (example)
+---------------------------
+
+On a modern 16-thread CPU (w64devkit/GCC):
+
+READ ONLY:          ~5–20ms
+WRITE ONLY:         ~20–600ms
+90% READ MIXED:     ~6–200ms
+
+Reads scale extremely well due to lock-free snapshot semantics.
+
 
 License
 -------
 
-MIT License. See LICENSE file for details.
+MIT License. See LICENSE for details.
